@@ -1914,10 +1914,9 @@ class LightBinding:
         if not target:
             self._report_activity("skipped", reason="target_not_configured")
             return
-        if self._multi and target in self._targets:
-            # The press changes a light this binding rotates, so the level it
-            # tracked is no longer where the lights are, and a queued rotation
-            # must not fire afterwards.
+        if target in self._targets:
+            # The press changes a target this binding rotates, whether one
+            # light or several. A queued rotation must not run afterwards.
             self._invalidate_tracking("press_changed_target")
         if (
             self._multi
