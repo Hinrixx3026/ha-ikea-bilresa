@@ -3209,6 +3209,7 @@ def test_a_single_light_press_cancels_a_rotation_still_queued(monkeypatch) -> No
 
     assert _service_calls(binding)[-1][:2] == ("homeassistant", "turn_off")
     assert binding._pending_command is None
+    assert binding._tracked is None
     calls_after_press = binding.hass.services.async_call.call_count
     binding._flush_pending_command()
     assert binding.hass.services.async_call.call_count == calls_after_press
@@ -3272,6 +3273,63 @@ def test_unavailable_single_light_press_does_not_cancel_pending_command(
 
     assert binding._pending_command == pending
     assert len(_service_calls(binding)) == 1
+
+
+def test_a_scene_press_cancels_queued_dimming_for_one_light(monkeypatch) -> None:
+    """Scene activation may change the rotating light behind a pending dim."""
+    binding, _interval_unsub, _watchdog_unsub = _binding(
+        monkeypatch, scenes=["scene.night"]
+    )
+    now = [0.0]
+    monkeypatch.setattr(
+        "custom_components.ikea_bilresa.binding.time.monotonic", lambda: now[0]
+    )
+    binding._min_command_interval = 5.0
+    binding.hass.states.get.return_value = SimpleNamespace(
+        state="on", attributes={"brightness": 200}
+    )
+    binding._rotate_brightness(1, up=False)
+    now[0] = 0.05
+    binding._rotate_brightness(1, up=False)
+    assert binding._pending_command is not None
+
+    binding._handle_action(_action(ACTION_PRESS, presses=1))
+
+    assert _service_calls(binding)[-1][:2] == ("scene", "turn_on")
+    assert binding._pending_command is None
+    assert binding._tracked is None
+
+
+def test_play_pause_keeps_queued_volume_change(monkeypatch) -> None:
+    """Playback changes neither volume_level nor a queued volume_set."""
+    binding, _interval_unsub, _watchdog_unsub = _binding(
+        monkeypatch,
+        **{
+            CONF_TARGET: "media_player.test",
+            CONF_MODE: MODE_VOLUME,
+            "click_action": "play_pause",
+        },
+    )
+    now = [0.0]
+    monkeypatch.setattr(
+        "custom_components.ikea_bilresa.binding.time.monotonic", lambda: now[0]
+    )
+    binding._min_command_interval = 5.0
+    binding.hass.states.get.return_value = SimpleNamespace(
+        state="playing", attributes={"volume_level": 0.5}
+    )
+    binding._rotate_volume(1, up=True)
+    now[0] = 0.05
+    binding._rotate_volume(1, up=True)
+    pending = binding._pending_command
+    tracked = binding._tracked
+    assert pending is not None
+
+    binding._handle_action(_action(ACTION_PRESS, presses=1))
+
+    assert _service_calls(binding)[-1][:2] == ("media_player", "media_play_pause")
+    assert binding._pending_command == pending
+    assert binding._tracked == tracked
 
 
 def test_a_press_cancels_a_rotation_still_queued(monkeypatch) -> None:
