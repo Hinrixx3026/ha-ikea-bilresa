@@ -3214,6 +3214,64 @@ def test_a_single_light_press_cancels_a_rotation_still_queued(monkeypatch) -> No
     assert binding.hass.services.async_call.call_count == calls_after_press
 
 
+def test_a_single_light_sequence_cancels_a_rotation_still_queued(monkeypatch) -> None:
+    """A gesture sequence may turn off the light before a queued dim is sent."""
+    binding, _interval_unsub, _watchdog_unsub = _binding(
+        monkeypatch,
+        click_action="run",
+        click_sequence=[{"action": "light.turn_off", "target": {"entity_id": "light.test"}}],
+    )
+    now = [0.0]
+    monkeypatch.setattr(
+        "custom_components.ikea_bilresa.binding.time.monotonic", lambda: now[0]
+    )
+    binding._min_command_interval = 5.0
+    binding.hass.states.get.return_value = SimpleNamespace(
+        state="on", attributes={"brightness": 200}
+    )
+    binding._rotate_brightness(1, up=False)
+    now[0] = 0.05
+    binding._rotate_brightness(1, up=False)
+    assert binding._pending_command is not None
+
+    binding._handle_action(_action(ACTION_PRESS, presses=1))
+
+    assert binding._pending_command is None
+    calls_after_press = binding.hass.services.async_call.call_count
+    binding._flush_pending_command()
+    assert binding.hass.services.async_call.call_count == calls_after_press
+
+
+def test_unavailable_single_light_press_does_not_cancel_pending_command(
+    monkeypatch,
+) -> None:
+    """A skipped press should not itself discard a pending rotation."""
+    binding, _interval_unsub, _watchdog_unsub = _binding(
+        monkeypatch, click_action="off"
+    )
+    now = [0.0]
+    monkeypatch.setattr(
+        "custom_components.ikea_bilresa.binding.time.monotonic", lambda: now[0]
+    )
+    binding._min_command_interval = 5.0
+    binding.hass.states.get.return_value = SimpleNamespace(
+        state="on", attributes={"brightness": 200}
+    )
+    binding._rotate_brightness(1, up=False)
+    now[0] = 0.05
+    binding._rotate_brightness(1, up=False)
+    pending = binding._pending_command
+    assert pending is not None
+
+    binding.hass.states.get.return_value = SimpleNamespace(
+        state="unavailable", attributes={}
+    )
+    binding._handle_action(_action(ACTION_PRESS, presses=1))
+
+    assert binding._pending_command == pending
+    assert len(_service_calls(binding)) == 1
+
+
 def test_a_press_cancels_a_rotation_still_queued(monkeypatch) -> None:
     """A coalesced value must not fire afterwards and relight the lights."""
     binding, _now, _report = _lights_binding(monkeypatch, dict.fromkeys(_LIGHTS, 200))
