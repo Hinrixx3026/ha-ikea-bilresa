@@ -1881,6 +1881,10 @@ class LightBinding:
     def _single_press(self) -> None:
         if self._scenes:
             scene = self._scenes[self._scene_index]
+            # A scene may change the rotated lights, even if it is not itself
+            # the rotation target. Do not let an older dim command override it.
+            if self._targets and self._available_state(scene) is not None:
+                self._invalidate_tracking("scene_activated")
             if self._call_entity(
                 "scene",
                 "turn_on",
@@ -1977,15 +1981,15 @@ class LightBinding:
 
     def _run_sequence(self, gesture: str) -> None:
         """Run the Home Assistant actions the user set for this gesture."""
+        if self._targets:
+            # An arbitrary action sequence may change any rotation target,
+            # even when the binding controls only one entity.
+            self._invalidate_tracking("actions_started")
         result = {"kind": "actions", "action": "run"}
         sequence = self._sequences.get(gesture)
         if not sequence:
             self._report_activity("skipped", result=result, reason="actions_missing")
             return
-        if self._targets:
-            # An arbitrary action sequence may change any rotation target,
-            # even when the binding controls only one entity.
-            self._invalidate_tracking("actions_started")
         action = self._active_action
         self._report_activity("pending", result=result, action=action)
         self.hass.async_create_task(
@@ -2215,7 +2219,12 @@ class LightBinding:
         # Only discard queued rotation once the press can actually be sent.
         # A skipped/unavailable target must not erase a pending command.
         dispatched_targets = entity_id if isinstance(entity_id, list) else [entity_id]
-        if any(target in self._targets for target in dispatched_targets):
+        if any(target in self._targets for target in dispatched_targets) and not (
+            self._mode == MODE_VOLUME
+            and domain == "media_player"
+            and service not in ("volume_set", "volume_up", "volume_down", "volume_mute")
+        ):
+            # Playback controls do not change the level being rotated.
             self._invalidate_tracking("press_changed_target")
         action = self._active_action
         self._report_activity("pending", result=result, action=action)
