@@ -3219,7 +3219,9 @@ def test_a_single_light_sequence_cancels_a_rotation_still_queued(monkeypatch) ->
     binding, _interval_unsub, _watchdog_unsub = _binding(
         monkeypatch,
         click_action="run",
-        click_sequence=[{"action": "light.turn_off", "target": {"entity_id": "light.test"}}],
+        click_sequence=[
+            {"action": "light.turn_off", "target": {"entity_id": "light.test"}}
+        ],
     )
     now = [0.0]
     monkeypatch.setattr(
