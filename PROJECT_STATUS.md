@@ -1,5 +1,56 @@
 # Project status and agent handoff
 
+## PR #71: invalid-range safety follow-up (2026-11-18)
+
+- **Review finding:** Sourcery identified an effective climate range of
+  `min_temp=7` (fallback for missing/invalid min) and explicit `max_temp=0`.
+  Without a range guard, the clamp produces an invalid temperature of 0.
+- **Minimal fix:** Numeric and climate rotations now skip dispatch when the
+  effective minimum is not less than the effective maximum. A valid negative
+  minimum and zero maximum still dispatch correctly. No async scheduling,
+  gestures, precision policy or other service behavior is modified.
+- **Regression tests:** Cases for missing, invalid, equal and reversed bounds
+  ensure no service calls occur. Existing negative-to-zero tests still cover
+  valid zero bounds.
+- **Earlier exact-head evidence:** Commit `b40e6da` passed CI
+  [#44249294213](https://github.com/Vituhlos/ha-ikea-bilresa/actions/runs/44249294213)
+  and CodeQL
+  [#44249294198](https://github.com/Vituhlos/ha-ikea-bilresa/actions/runs/44249294198).
+  Those checks apply **only** to that earlier commit, not the new one.
+  Local dependency-equipped pytest, Ruff and mypy were not available; check
+  exact-head GitHub Actions for this follow-up before calling it CI-verified.
+- **Hardware:** Still **NOT validated** on the patched physical BILRESA.
+  A new device test and exact environment versions are required.
+- **Next action:** Verify exact-head CI and CodeQL, then allow maintainer
+  review and arrange the physical zero-bound retest.
+
+## PR #71: focused zero-bound bug fix (2026-11-18)
+
+- **Scope:** Restore upstream `main` binding/service behavior except for explicit
+  zero-bound checks in number/input_number and climate. Previous experimental
+  fractional-accumulation, command-generation and asynchronous dispatch
+  hardening was deliberately excluded: it created complex review regressions.
+  Its historical reviews remain in the PR conversation, but those changes are
+  no longer in the proposed diff.
+- **Changes:** `custom_components/ikea_bilresa/binding.py` fixes zero-valued
+  min/max handling; `tests/test_binding.py` tests the physical reproduction
+  (-1 to 0), two numeric domains, climate bounds, zero-step fallback, limit
+  suppression and missing-maximum fallback. Changelog describes only this fix.
+  The EN/CS README scope notes and pre-fix `docs/HARDWARE_TEST.md` evidence
+  remain intact.
+- **Validation:** The changed source was checked against the upstream base
+  to confirm no unrelated runtime edits. Local Python/HA suite, Ruff, mypy
+  and CodeQL were **not run** because a dependency-equipped checkout was not
+  available. Exact-head GitHub CI/CodeQL must run after this commit.
+- **Hardware:** The Nov 13 observation is only **pre-fix FAIL**, not patched
+  hardware verification. Record exact Home Assistant, Matter Server, integration
+  and BILRESA firmware versions during the patched retest.
+- **Known limitation:** The existing small-notch rounding stall and normal
+  service dispatch/race behavior of upstream `main` are not fixed here.
+  They require separate, narrowly scoped and hardware-validated work.
+- **Next action:** Check exact-head CI and CodeQL, then request maintainer
+  review and retest on a physical BILRESA before claiming release readiness.
+
 ## GitHub development automation — Phase 2A proposed (2026-11-10)
 
 **Phase 1: complete.** PR [#68](https://github.com/Vituhlos/ha-ikea-bilresa/pull/68) was merged into main. Maintainer created and stopped an interactive Codespace after **543 Python tests and 47 Node tests passed**; Ruff and mypy (existing no-site-packages baseline) were clean. Both GitHub branch rulesets are **active**: main #26934594 and agent/panel-0.6.1 #26934615, with six source-pinned CI checks, required PRs and resolved conversations. Actual enforcement on a new post-activation PR remains to be observed. Physical device validation is separate.
